@@ -1,0 +1,80 @@
+import discord
+from discord.ext import commands
+from discord import app_commands
+import asyncio
+
+# Intencje bota
+intents = discord.Intents.default()
+intents.messages = True
+intents.guilds = True
+intents.message_content = True
+
+# Przechowywanie liczników
+rep_counts = {}
+
+class SecondBot(commands.Bot):
+    def __init__(self):
+        super().__init__(command_prefix="/", intents=intents)
+
+    async def setup_hook(self):
+        await self.tree.sync()
+
+bot = SecondBot()
+
+# Komenda "/wiadomosc"
+@bot.tree.command(name="wiadomosc", description="Wysyła spersonalizowaną wiadomość z podanym kolorem, tytułem i opisem")
+async def wiadomosc(interaction: discord.Interaction, kolor: str, tytul: str, opis: str, obrazek_url: str = None, napis_dol: str = None, ikona_url: str = None):
+    try:
+        kolor_hex = int(kolor.replace("#", ""), 16)
+        embed = discord.Embed(title=tytul, description=opis, color=kolor_hex)
+
+        if obrazek_url:
+            embed.set_image(url=obrazek_url)
+
+        if napis_dol and ikona_url:
+            embed.set_footer(text=napis_dol, icon_url=ikona_url)
+        elif napis_dol:
+            embed.set_footer(text=napis_dol)
+
+        await interaction.response.send_message(embed=embed)
+    except ValueError:
+        await interaction.response.send_message("Podano nieprawidłowy kolor. Użyj formatu #RRGGBB.", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"Wystąpił błąd: {e}", ephemeral=True)
+
+# Monitorowanie kanału
+@bot.event
+async def on_message(message):
+    if message.channel.name.startswith("✅・legit-check") and message.author != bot.user:
+        content = message.content
+        if content.startswith("+rep"):
+            parts = content.split(" ", 2)
+            if len(parts) < 3 or not parts[1].startswith("<@"):
+                response = await message.channel.send("Niepoprawny format wiadomości! Użyj: `+rep @użytkownik komentarz`.")
+                await asyncio.sleep(10)
+                await response.delete()
+                await message.delete()
+                return
+
+            user = parts[1]
+            comment = parts[2]
+
+            if user not in rep_counts:
+                rep_counts[user] = 0
+
+            rep_counts[user] += 1
+
+            current_count = int(message.channel.name.split("-")[-1]) if "-" in message.channel.name else 0
+            new_channel_name = f"✅・legit-check-{current_count + 1}"
+            await message.channel.edit(name=new_channel_name)
+
+# Komenda "/reps"
+@bot.tree.command(name="reps", description="Sprawdź liczbę legit czeków użytkownika")
+async def reps(interaction: discord.Interaction, osoba: discord.Member):
+    user_mention = osoba.mention
+    count = rep_counts.get(user_mention, 0)
+    await interaction.response.send_message(f"{osoba.mention} ma {count} legit czeków.")
+
+# Uruchomienie bota
+TOKEN = "YOUR_BOT_TOKEN"
+bot.run(TOKEN)
